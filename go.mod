@@ -1,4 +1,4 @@
-module github.com/sbp-did/sbp-did-sdk-go
+module github.com/helailiang/sbp-did-sdk-go
 
 go 1.19
 
