@@ -1,0 +1,10 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Prefer using camelCase for variable names
+
+
+
+时间：采用 ISO 8601 格式（例如 2025-04-27T17:58:33Z）
