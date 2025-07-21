@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/config"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/config"
 )
 
 // EncryptionResult 加密结果
@@ -197,4 +197,4 @@ func DecryptFromHex(cfg *config.Config, privateKey interface{}, encryptedDataHex
 		return nil, fmt.Errorf("failed to decode hex encrypted data: %w", err)
 	}
 	return Decrypt(cfg, privateKey, encryptedData, algorithm)
-} 
+}

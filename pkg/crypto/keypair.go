@@ -9,7 +9,7 @@ import (
 	"fmt"
 
 	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/config"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/config"
 )
 
 // KeyPair 表示密钥对

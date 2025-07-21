@@ -5,18 +5,18 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/config"
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/crypto"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/config"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/crypto"
 )
 
-// DIDDocument 表示DID文档结构
+// DIDDocument 表示DID文档结构（兼容TrustBloc/W3C）
 type DIDDocument struct {
-	Context              []string               `json:"@context"`
-	ID                   string                 `json:"id"`
-	Controller           string                 `json:"controller,omitempty"`
-	VerificationMethod   []VerificationMethod   `json:"verificationMethod,omitempty"`
-	Authentication       []string               `json:"authentication,omitempty"`
-	AssertionMethod      []string               `json:"assertionMethod,omitempty"`
+	Context            []string             `json:"@context"`
+	ID                 string               `json:"id"`
+	Controller         string               `json:"controller,omitempty"`
+	VerificationMethod []VerificationMethod `json:"verificationMethod,omitempty"`
+	Authentication     []string             `json:"authentication,omitempty"`
+	AssertionMethod    []string             `json:"assertionMethod,omitempty"`
 	KeyAgreement         []string               `json:"keyAgreement,omitempty"`
 	CapabilityInvocation []string               `json:"capabilityInvocation,omitempty"`
 	CapabilityDelegation []string               `json:"capabilityDelegation,omitempty"`
@@ -28,15 +28,13 @@ type DIDDocument struct {
 	CustomFields         map[string]interface{} `json:"-"`
 }
 
-// VerificationMethod 表示验证方法
+// VerificationMethod 表示验证方法（兼容TrustBloc/W3C）
 type VerificationMethod struct {
-	ID                 string                 `json:"id"`
-	Type               string                 `json:"type"`
-	Controller         string                 `json:"controller"`
-	PublicKeyJwk       *PublicKeyJwk          `json:"publicKeyJwk,omitempty"`
-	PublicKeyMultibase string                 `json:"publicKeyMultibase,omitempty"`
-	PublicKeyHex       string                 `json:"publicKeyHex,omitempty"`
-	CustomFields       map[string]interface{} `json:"-"`
+	ID              string      `json:"id"`
+	Type            string      `json:"type"`
+	Controller      string      `json:"controller"`
+	PublicKeyBase58 string      `json:"publicKeyBase58,omitempty"`
+	PublicKeyJwk    interface{} `json:"publicKeyJwk,omitempty"`
 }
 
 // PublicKeyJwk 表示JWK格式的公钥
@@ -123,6 +121,66 @@ func AssembleDIDDocument(cfg *config.Config, publicKey interface{}, algorithm, d
 	}
 
 	return doc, nil
+}
+
+// AssembleMultiKeyDIDDocument 组装包含多个密钥的DID文档
+func AssembleMultiKeyDIDDocument(did string, keys []VerificationMethod, authKeys, assertionKeys []string) *DIDDocument {
+	return &DIDDocument{
+		Context:            []string{"https://www.w3.org/ns/did/v1"},
+		ID:                 did,
+		Controller:         did,
+		VerificationMethod: keys,
+		Authentication:     authKeys,
+		AssertionMethod:    assertionKeys,
+	}
+}
+
+// AddKey 向DID文档添加一个密钥，并指定用途（如authentication、assertionMethod等）
+func (doc *DIDDocument) AddKey(newKey VerificationMethod, usages ...string) {
+	doc.VerificationMethod = append(doc.VerificationMethod, newKey)
+	for _, usage := range usages {
+		switch usage {
+		case "authentication":
+			doc.Authentication = append(doc.Authentication, newKey.ID)
+		case "assertionMethod":
+			doc.AssertionMethod = append(doc.AssertionMethod, newKey.ID)
+		case "keyAgreement":
+			doc.KeyAgreement = append(doc.KeyAgreement, newKey.ID)
+		case "capabilityInvocation":
+			doc.CapabilityInvocation = append(doc.CapabilityInvocation, newKey.ID)
+		case "capabilityDelegation":
+			doc.CapabilityDelegation = append(doc.CapabilityDelegation, newKey.ID)
+		}
+	}
+}
+
+// RemoveKey 从DID文档中删除指定密钥（通过keyID），并同步移除所有用途中的引用
+func (doc *DIDDocument) RemoveKey(keyID string) {
+	// 移除VerificationMethod
+	newVM := []VerificationMethod{}
+	for _, vm := range doc.VerificationMethod {
+		if vm.ID != keyID {
+			newVM = append(newVM, vm)
+		}
+	}
+	doc.VerificationMethod = newVM
+	// 移除所有用途中的引用
+	doc.Authentication = removeStringFromSlice(doc.Authentication, keyID)
+	doc.AssertionMethod = removeStringFromSlice(doc.AssertionMethod, keyID)
+	doc.KeyAgreement = removeStringFromSlice(doc.KeyAgreement, keyID)
+	doc.CapabilityInvocation = removeStringFromSlice(doc.CapabilityInvocation, keyID)
+	doc.CapabilityDelegation = removeStringFromSlice(doc.CapabilityDelegation, keyID)
+}
+
+// removeStringFromSlice 工具函数：从字符串切片中移除指定元素
+func removeStringFromSlice(slice []string, target string) []string {
+	result := []string{}
+	for _, s := range slice {
+		if s != target {
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 // createVerificationMethod 创建验证方法
@@ -314,3 +372,32 @@ func ValidateDIDDocument(doc *DIDDocument) error {
 
 	return nil
 }
+
+// NewVerificationMethodFromKeyManager 工具函数：通过KeyManager生成的密钥自动组装VerificationMethod
+// 参数：didIdentifier、keyID、algorithm、keyManager
+// 返回：VerificationMethod，error
+func NewVerificationMethodFromKeyManager(didIdentifier, keyID, algorithm string, keyManager crypto.KeyManager) (*VerificationMethod, error) {
+	pubKey, err := keyManager.GetPublicKey(keyID)
+	if err != nil {
+		return nil, err
+	}
+	// 组装JWK（这里只做简单示例，实际应根据算法和公钥类型填充x/y/n/e等字段）
+	var jwk interface{}
+	switch algorithm {
+	case "ECDSA":
+		jwk = map[string]interface{}{"kty": "EC", "crv": "secp256k1", "x": "x", "y": "y"} // TODO: 真实x/y
+	case "RSA":
+		jwk = map[string]interface{}{"kty": "RSA", "n": "n", "e": "AQAB"} // TODO: 真实n
+	case "SM2":
+		jwk = map[string]interface{}{"kty": "EC", "crv": "secp256k1", "x": "x", "y": "y"}
+	default:
+		jwk = nil
+	}
+	return &VerificationMethod{
+		ID:           didIdentifier + "#" + keyID,
+		Type:         map[string]string{"ECDSA": "EcdsaSecp256k1VerificationKey2019", "RSA": "RsaVerificationKey2018", "SM2": "EcdsaSecp256k1VerificationKey2019"}[algorithm],
+		Controller:   didIdentifier,
+		PublicKeyJwk: jwk,
+	}, nil
+}
+ 

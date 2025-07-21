@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/config"
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/crypto"
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/did"
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/utils"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/config"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/crypto"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/did"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/utils"
 )
 
 func main() {

@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/config"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/config"
 )
 
 // SignatureResult 签名结果

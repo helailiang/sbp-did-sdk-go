@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/config"
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/crypto"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/config"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/crypto"
 )
 
 // CalculateDIDIdentifier 计算DID标识符 (SDK-002)
@@ -159,4 +159,4 @@ func GenerateDIDFromPublicKeyBytes(publicKeyBytes []byte, didMethod string) (str
 	}
 
 	return CalculateDIDIdentifier(publicKeyBytes, didMethod)
-} 
+}

@@ -111,3 +111,4 @@ func (c *Client) VCVerify(req *VCVerifyRequest) (*VCVerifyResponse, error) {
 	}
 	return &resp, nil
 }
+ 

@@ -301,3 +301,271 @@ go build -o sbp-did-sdk cmd/main.go
 ## 联系方式
 
 [联系信息] 
+
+---
+
+## 1. 设计方案
+
+### 1.1 目录与文件结构建议
+
+- `pkg/crypto/keymanager.go`：定义KeyManager接口
+- `pkg/crypto/kms_huawei.go`：华为云KMS实现
+- `pkg/crypto/keystore_local.go`：本地Keystore实现（后续补充）
+- `tests/keymanager_kms_test.go`：KMS功能测试用例
+- `tests/keymanager_local_test.go`：本地功能测试用例（后续补充）
+
+---
+
+## 2. 代码实现（第一步：华为云KMS）
+
+### 2.1 定义KeyManager接口（`pkg/crypto/keymanager.go`）
+
+```go
+package crypto
+
+type KeyManager interface {
+    GenerateKey(alg, keyName string) (KeyPair, error)
+    GetPublicKey(keyName string) ([]byte, error)
+    Sign(keyName string, data []byte) ([]byte, error)
+    Verify(keyName string, data, signature []byte) (bool, error)
+    Encrypt(keyName string, data []byte) ([]byte, error)
+    Decrypt(keyName string, data []byte) ([]byte, error)
+}
+```
+
+### 2.2 实现华为云KMS KeyManager（`pkg/crypto/kms_huawei.go`）
+
+> 需引入华为云KMS Go SDK（`github.com/huaweicloud/huaweicloud-sdk-go-v3`），并配置好AK/SK等。
+
+```go
+package crypto
+
+import (
+    // 引入华为云KMS SDK
+    "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/kms/v2"
+    "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/kms/v2/model"
+    "github.com/huaweicloud/huaweicloud-sdk-go-v3/core/auth/basic"
+    "github.com/huaweicloud/huaweicloud-sdk-go-v3/core"
+    "fmt"
+)
+
+type HuaweiKMSKeyManager struct {
+    client *kms.KmsClient
+    projectId string
+}
+
+func NewHuaweiKMSKeyManager(endpoint, ak, sk, projectId string) (*HuaweiKMSKeyManager, error) {
+    auth := basic.NewCredentialsBuilder().
+        WithAk(ak).
+        WithSk(sk).
+        WithProjectId(projectId).
+        Build()
+    client := kms.NewKmsClient(
+        kms.KmsClientBuilder().
+            WithEndpoint(endpoint).
+            WithCredential(auth).
+            Build(),
+    )
+    return &HuaweiKMSKeyManager{client: client, projectId: projectId}, nil
+}
+
+func (h *HuaweiKMSKeyManager) GenerateKey(alg, keyName string) (KeyPair, error) {
+    // 这里只演示RSA密钥，其他算法可扩展
+    req := &model.CreateKeyRequest{
+        Body: &model.CreateKeyRequestBody{
+            KeyAlias: keyName,
+            KeySpec:  "RSA_2048", // 或SM2/ECDSA等
+            KeyUsage: "SIGN_VERIFY",
+        },
+    }
+    resp, err := h.client.CreateKey(req)
+    if err != nil {
+        return KeyPair{}, err
+    }
+    return KeyPair{
+        KeyName:   keyName,
+        Algorithm: alg,
+        // 这里只返回KeyId，实际公钥需通过GetPublicKey获取
+        PublicKey: resp.KeyMetadata.KeyId,
+    }, nil
+}
+
+func (h *HuaweiKMSKeyManager) GetPublicKey(keyName string) ([]byte, error) {
+    req := &model.ShowPublicKeyRequest{
+        KeyId: keyName,
+    }
+    resp, err := h.client.ShowPublicKey(req)
+    if err != nil {
+        return nil, err
+    }
+    return []byte(resp.PublicKey), nil
+}
+
+func (h *HuaweiKMSKeyManager) Sign(keyName string, data []byte) ([]byte, error) {
+    req := &model.SignRequest{
+        Body: &model.SignRequestBody{
+            KeyId:     keyName,
+            Message:   data,
+            SigningAlgorithm: "RSASSA_PKCS1_V1_5_SHA_256", // 视密钥类型而定
+            MessageType: "DIGEST",
+        },
+    }
+    resp, err := h.client.Sign(req)
+    if err != nil {
+        return nil, err
+    }
+    return []byte(resp.Signature), nil
+}
+
+func (h *HuaweiKMSKeyManager) Verify(keyName string, data, signature []byte) (bool, error) {
+    req := &model.VerifyRequest{
+        Body: &model.VerifyRequestBody{
+            KeyId:     keyName,
+            Message:   data,
+            Signature: signature,
+            SigningAlgorithm: "RSASSA_PKCS1_V1_5_SHA_256",
+            MessageType: "DIGEST",
+        },
+    }
+    resp, err := h.client.Verify(req)
+    if err != nil {
+        return false, err
+    }
+    return *resp.Valid, nil
+}
+
+// Encrypt/Decrypt可参考KMS文档实现
+func (h *HuaweiKMSKeyManager) Encrypt(keyName string, data []byte) ([]byte, error) { return nil, fmt.Errorf("not implemented") }
+func (h *HuaweiKMSKeyManager) Decrypt(keyName string, data []byte) ([]byte, error) { return nil, fmt.Errorf("not implemented") }
+```
+
+
+---
+
+## 3. 下一步
+
+- 你可以先集成上述KMS KeyManager和测试用例，验证KMS功能。
+- 本地Keystore实现可后续补充，接口完全兼容。
+- 如需支持更多算法、完善Encrypt/Decrypt、或有KMS配置问题，可随时反馈。
+
+如需我直接将上述代码自动写入你的项目，请回复“确认”，我会一步到位集成！ 
+
+## 密钥管理架构与用法（Aries/TrustBloc风格）
+
+本SDK的密钥管理模块（`pkg/crypto`）采用业界主流的Aries/TrustBloc风格设计，支持多种密钥后端（本地Keystore、华为云KMS等），所有密钥均用唯一keyID管理，接口高度可扩展。
+
+### 1. 主要接口
+
+- **KeyManager**：密钥生命周期管理（创建、导入、导出、删除、列举、获取公钥）
+- **Crypto**：加解密、签名、验签等操作，全部通过keyID调用
+
+接口定义示例：
+```go
+// 支持的密钥类型
+const (
+    ED25519   KeyType = "ED25519"
+    ECDSAP256 KeyType = "ECDSAP256"
+    RSA2048   KeyType = "RSA2048"
+    SM2       KeyType = "SM2"
+)
+
+type KeyManager interface {
+    Create(keyType KeyType, opts ...KeyOpts) (keyID string, pubKey []byte, err error)
+    Get(keyID string) (pubKey []byte, err error)
+    ImportPrivateKey(privKey []byte, keyType KeyType, opts ...KeyOpts) (keyID string, err error)
+    ExportPrivateKey(keyID string) ([]byte, error)
+    Delete(keyID string) error
+    List() ([]string, error)
+}
+
+type Crypto interface {
+    Sign(keyID string, data []byte) ([]byte, error)
+    Verify(keyID string, data, signature []byte) (bool, error)
+    Encrypt(keyID string, plaintext []byte) ([]byte, error)
+    Decrypt(keyID string, ciphertext []byte) ([]byte, error)
+}
+```
+
+### 2. 多后端实现
+
+- **本地Keystore**（`pkg/crypto/keystore_local.go`）：密钥安全存储于本地，适合开发和轻量级场景。
+- **华为云KMS**（`pkg/crypto/kms_huawei.go`）：企业级云密钥管理，适合生产环境。
+- **可扩展AWS KMS等**：接口已兼容，未来可直接扩展。
+
+### 3. 用法示例
+
+```go
+import (
+    "github.com/your-org/sbp-did-sdk-go/pkg/crypto"
+)
+
+func main() {
+    // 1. 初始化本地KeyManager
+    km := crypto.NewLocalKeyManager()
+    // 2. 创建密钥
+    keyID, pub, err := km.Create(crypto.ECDSAP256)
+    if err != nil { panic(err) }
+    // 3. 签名/验签
+    data := []byte("hello world")
+    sig, err := km.Sign(keyID, data)
+    valid, err := km.Verify(keyID, data, sig)
+    // 4. 导出/导入/删除密钥
+    priv, _ := km.ExportPrivateKey(keyID)
+    newKeyID, _ := km.ImportPrivateKey(priv, crypto.ECDSAP256)
+    _ = km.Delete(keyID)
+    // 5. 列举所有keyID
+    ids, _ := km.List()
+}
+```
+
+> 华为云KMS用法与本地类似，初始化时需传入endpoint、AK/SK、projectId等参数，部分操作（如导入/导出私钥）受限于KMS能力。
+
+### 4. 设计优势
+- **接口统一**，便于切换后端和扩展新KMS。
+- **安全合规**，支持企业级HSM/KMS。
+- **兼容Aries/TrustBloc生态**，便于对接主流DID/VC项目。
+
+详细接口和实现请见 [`pkg/crypto/keymanager.go`](pkg/crypto/keymanager.go)、[`pkg/crypto/keystore_local.go`](pkg/crypto/keystore_local.go)、[`pkg/crypto/kms_huawei.go`](pkg/crypto/kms_huawei.go)。 
+
+## 钱包高级功能
+
+### 1. 可验证表示（VP）
+- 支持W3C标准的VerifiablePresentation模型
+- 可用于多VC聚合、Holder证明等场景
+- 详见 `pkg/wallet/models.go` 中 VerifiablePresentation 结构体
+
+### 2. 钱包备份与恢复
+- 支持一键导出/恢复所有用户、VC、Key、Collection等数据
+- 适合钱包迁移、备份、灾备等场景
+- 主要API：
+  - `Backup(notes string) (*WalletBackup, error)`
+  - `Restore(backup *WalletBackup) error`
+  - `BackupToJSON(notes string) ([]byte, error)`
+  - `RestoreFromJSON(data []byte) error`
+- 详见 `pkg/wallet/wallet.go`
+
+### 3. API说明（部分）
+
+```go
+// Wallet核心API
+func NewWallet() *Wallet
+func (w *Wallet) AddUser(did string, keyManager crypto.KeyManager) error
+func (w *Wallet) GetUser(did string) (*WalletUser, error)
+func (w *Wallet) Backup(notes string) (*WalletBackup, error)
+func (w *Wallet) Restore(backup *WalletBackup) error
+func (w *Wallet) BackupToJSON(notes string) ([]byte, error)
+func (w *Wallet) RestoreFromJSON(data []byte) error
+
+// WalletUser常用API
+func (u *WalletUser) AddCredential(vc *Credential) error
+func (u *WalletUser) GetCredential(id string) (*Credential, error)
+func (u *WalletUser) DeleteCredential(id string) error
+func (u *WalletUser) AddKey(key *Key) error
+func (u *WalletUser) GetKey(id string) (*Key, error)
+func (u *WalletUser) DeleteKey(id string) error
+func (u *WalletUser) AddCollection(col *Collection) error
+func (u *WalletUser) GetCollection(id string) (*Collection, error)
+func (u *WalletUser) DeleteCollection(id string) error
+```
+
+> 更多用法请参考 `examples/wallet_usage.go` 和 `tests/wallet_test.go`。 

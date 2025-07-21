@@ -57,3 +57,4 @@ func (c *Client) UpdateDID(req *UpdateDIDRequest) (*UpdateDIDResponse, error) {
 	}
 	return &resp, nil
 }
+ 

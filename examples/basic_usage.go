@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/api"
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/config"
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/crypto"
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/did"
-	"github.com/sbp-did/sbp-did-sdk-go/pkg/utils"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/api"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/config"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/crypto"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/did"
+	"github.com/helailiang/sbp-did-sdk-go/pkg/utils"
 )
 
 // BasicUsageExample 基本使用示例
@@ -418,6 +418,37 @@ func SignAndIssueVCExample() {
 	fmt.Println("签发VC成功，返回数据:", issueVCResp.Data)
 }
 
+// MultiKeyDIDDocumentExample 演示如何组装包含Multiple Keys的DID文档
+func MultiKeyDIDDocumentExample() {
+	fmt.Println("\nSBP DID SDK Go - 多密钥DID文档组装示例")
+	fmt.Println("====================================")
+	did := "did:example:123456789abcdefghi"
+
+	// 假设有两个密钥，一个ECDSA，一个Ed25519
+	vm1 := did.VerificationMethod{
+		ID:              did + "#key-1",
+		Type:            "EcdsaSecp256k1VerificationKey2019",
+		Controller:      did,
+		PublicKeyBase58: "2bVtQw1...ecdsaBase58...",
+	}
+	vm2 := did.VerificationMethod{
+		ID:              did + "#key-2",
+		Type:            "Ed25519VerificationKey2018",
+		Controller:      did,
+		PublicKeyBase58: "3fGkQw1...ed25519Base58...",
+	}
+
+	didDoc := did.AssembleMultiKeyDIDDocument(
+		did,
+		[]did.VerificationMethod{vm1, vm2},
+		[]string{vm1.ID, vm2.ID},
+		[]string{vm1.ID},
+	)
+
+	docBytes, _ := json.MarshalIndent(didDoc, "", "  ")
+	fmt.Println(string(docBytes))
+}
+
 func main() {
 	// 运行基本使用示例
 	BasicUsageExample()
@@ -426,3 +457,4 @@ func main() {
 	AdvancedUsageExample()
 	OpenAPIUsageExample()
 }
+ 
